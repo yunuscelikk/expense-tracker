@@ -15,11 +15,11 @@ module.exports = {
       },
       icon: {
         type: Sequelize.STRING,
-        allowNull: false
+        allowNull: true
       },
       userId: {
         type: Sequelize.INTEGER,
-        allowNull: false,
+        allowNull: true,
         references: {
           model: 'Users',
           key: 'id',

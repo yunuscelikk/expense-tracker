@@ -24,14 +24,17 @@ module.exports = (sequelize, DataTypes) => {
     },
     name: {
       type: DataTypes.STRING,
-      allowNull: false      
+      allowNull: false
     },
     userId: {
       type: DataTypes.INTEGER,
       allowNull: false,
     },
-    icon: DataTypes.STRING,
-    allowNull: false
+    icon: {
+      type: DataTypes.STRING,
+      allowNull: true
+    }
+
   }, {
     sequelize,
     modelName: 'Category',
