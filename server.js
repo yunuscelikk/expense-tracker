@@ -2,7 +2,6 @@ require("dotenv").config();
 const authRoutes = require("./routes/authRoutes");
 const categoryRoutes = require("./routes/categoryRoutes");
 const expenseRoutes = require("./routes/expenseRoutes");
-const authHeader = require("./middleware/authMiddleware");
 const express = require('express');
 const app = express();
 
