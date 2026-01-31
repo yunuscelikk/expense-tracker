@@ -53,4 +53,20 @@ const loginUser = async (req, res) => {
     }
 }
 
-module.exports = { registerUser, loginUser }
+const getMe = async (req, res) => {
+    try {
+        const user = await User.findByPk(req.user.id, {
+            attributes: ["id", "email", "createdAt"],
+        });
+        if (!user) {
+            return res.status(404).json({error: "User not found"});
+        }
+
+        res.status(200).json(user);
+    } catch (err) {
+        console.error(err)
+        res.status(500).json({error: "Server error"});
+    }
+};
+
+module.exports = { registerUser, loginUser, getMe }
