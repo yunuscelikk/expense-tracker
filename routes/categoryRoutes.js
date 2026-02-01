@@ -6,13 +6,13 @@ const validateParams = require("../middleware/validateParams");
 const {createCategory, getCategories, getCategoriesById, updateCategory, deleteCategory} = require("../controllers/categoryController");
 const { createCategorySchema, updateCategorySchema, getCategoriesSchema, categoryIdParamSchema, deleteCategoryParamSchema } = require("../validators/category.schema");
 
-router.post("/categories", authMiddleware, validate(createCategorySchema), createCategory)
+router.post("/", authMiddleware, validate(createCategorySchema), createCategory)
 
-router.get("/categories", authMiddleware, validate(getCategoriesSchema), getCategories)
-router.get("/categories/:id", authMiddleware,validateParams(categoryIdParamSchema), getCategoriesById)
+router.get("/", authMiddleware, validate(getCategoriesSchema), getCategories)
+router.get("/:id", authMiddleware,validateParams(categoryIdParamSchema), getCategoriesById)
 
-router.put("/categories/:id", authMiddleware, validate(updateCategorySchema), updateCategory)
+router.put("/:id", authMiddleware, validate(updateCategorySchema), updateCategory)
 
-router.delete("/categories/:id", authMiddleware, validateParams(deleteCategoryParamSchema), deleteCategory)
+router.delete("/:id", authMiddleware, validateParams(deleteCategoryParamSchema), deleteCategory)
 
 module.exports = router;

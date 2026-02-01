@@ -7,17 +7,17 @@ const validateParams = require("../middleware/validateParams");
 const { createExpenseSchema, updateExpenseSchema, getExpensesSchema, getExpenseByIdParamSchema, deleteExpenseParamSchema, getMonthlySummarySchema, getDashboardSchema } = require("../validators/expense.schema");
 
 
-router.get("/expenses/summary", authMiddleware, validate(getMonthlySummarySchema),getMonthlySummary)
-router.get("/expenses/dashboard", authMiddleware, validate(getDashboardSchema),getDashboard)
+router.get("/summary", authMiddleware, validate(getMonthlySummarySchema),getMonthlySummary)
+router.get("/dashboard", authMiddleware, validate(getDashboardSchema),getDashboard)
 
-router.post("/expenses", authMiddleware, validate(createExpenseSchema),createExpense)
+router.post("/", authMiddleware, validate(createExpenseSchema),createExpense)
 
-router.get("/expenses", authMiddleware, validate(getExpensesSchema),getExpenses)
-router.get("/expenses/:id", authMiddleware, validateParams(getExpenseByIdParamSchema),getExpenseById)
+router.get("/", authMiddleware, validate(getExpensesSchema),getExpenses)
+router.get("/:id", authMiddleware, validateParams(getExpenseByIdParamSchema),getExpenseById)
 
 
-router.put("/expenses/:id", authMiddleware, validate(updateExpenseSchema), updateExpense)
+router.put("/:id", authMiddleware, validate(updateExpenseSchema), updateExpense)
 
-router.delete("/expenses/:id", authMiddleware, validateParams(deleteExpenseParamSchema),deleteExpense)
+router.delete("/:id", authMiddleware, validateParams(deleteExpenseParamSchema),deleteExpense)
 
 module.exports = router;
