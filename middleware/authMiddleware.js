@@ -1,26 +1,31 @@
 const jwt = require("jsonwebtoken");
+const { User } = require("../models");
 
-module.exports = (req, res, next) => {
-    const authHeader = req.headers["authorization"];
+const authMiddleware = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
 
-    if (!authHeader) {
-        return res.status(401).json({error: "Acces denied no token provided"});
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const token = authHeader.split(" ")[1];
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    const user = await User.findByPk(decoded.userId, {
+      attributes: ["id", "email"],
+    });
+
+    if (!user) {
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
-    const token = authHeader.split(" ")[1];
+    req.user = user;
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: "Invalid token" });
+  }
+};
 
-    if (!token) {
-        return res
-        .status(401)
-        .json({error: "Access denied. Invalid token format"});
-    }
-
-    try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        req.user = decoded; 
-
-        next();
-    } catch (err) {
-        res.status(401).json({error: "Invalid token"});
-    }
-}
+module.exports = authMiddleware;
