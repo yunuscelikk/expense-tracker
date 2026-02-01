@@ -9,3 +9,7 @@ exports.loginSchema = Joi.object({
   email: Joi.string().email().required(),
   password: Joi.string().required(),
 });
+
+exports.refreshSchema = Joi.object({
+  refreshToken: Joi.string().required(),
+});

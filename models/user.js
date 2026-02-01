@@ -36,6 +36,10 @@ module.exports = (sequelize, DataTypes) => {
     password: {
       type: DataTypes.STRING,
       allowNull: false
+    },
+    refreshToken: {
+      type: DataTypes.STRING,
+      allowNull: true
     }
   }, {
     sequelize,
@@ -45,7 +49,7 @@ module.exports = (sequelize, DataTypes) => {
     underscored: false,
 
     defaultScope: {
-      attributes: {exclude: ["password"]},
+      attributes: { exclude: ["password"] },
     },
     scopes: {
       withPassword: {
