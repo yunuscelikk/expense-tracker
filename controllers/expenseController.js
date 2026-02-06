@@ -1,88 +1,135 @@
-const { Expense, Category } = require("../models")
+const { Expense, Category } = require("../models");
 const { Op, fn, col } = require("sequelize");
 
-
 const createExpense = async (req, res) => {
-    const { amount, categoryId, description, date } = req.body;
+  const { amount, categoryId, description, date } = req.body;
 
-    try {
-        if (!amount || !categoryId) {
-            return res.status(400).json({ error: "Amount and categoryId are required" });
-        }
-        if (amount <= 0) {
-            return res.status(400).json({ error: "Amount must be greater than 0" });
-        }
-        const category = await Category.findOne({
-            where: {
-                id: categoryId,
-                userId: req.user.id
-            },
-        });
-        if (!category) {
-            return res.status(404).json({ error: "Category not found or not authorized" });
-        }
-
-        const expense = await Expense.create({
-            amount,
-            description,
-            categoryId,
-            userId: req.user.id,
-            date: date || new Date(),
-        });
-        res.status(201).json(expense);
-    } catch (err) {
-        console.error(err)
-        res.status(500).json({ error: "Expense creation failed" });
+  try {
+    if (!amount || !categoryId) {
+      return res
+        .status(400)
+        .json({ error: "Amount and categoryId are required" });
     }
-}
+    if (amount <= 0) {
+      return res.status(400).json({ error: "Amount must be greater than 0" });
+    }
+    const category = await Category.findOne({
+      where: {
+        id: categoryId,
+        userId: req.user.id,
+      },
+    });
+    if (!category) {
+      return res
+        .status(404)
+        .json({ error: "Category not found or not authorized" });
+    }
+
+    const expense = await Expense.create({
+      amount,
+      description,
+      categoryId,
+      userId: req.user.id,
+      date: date || new Date(),
+    });
+    res.status(201).json(expense);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Expense creation failed" });
+  }
+};
 
 const getExpenses = async (req, res) => {
-  const { categoryId, from, to, sort } = req.query;
+  const { dateRange, categoryIds, sortOrder } = req.query;
 
   const where = {
     userId: req.user.id,
   };
 
   try {
-    //Category filter + ownership check
-    if (categoryId) {
-      const category = await Category.findOne({
+    /* ------------------------
+       DATE RANGE FILTER
+    ------------------------ */
+    if (dateRange) {
+      const now = new Date();
+      let from;
+
+      switch (dateRange) {
+        case "today":
+          from = new Date(now.setHours(0, 0, 0, 0));
+          break;
+
+        case "week":
+          from = new Date();
+          from.setDate(from.getDate() - 7);
+          break;
+
+        case "month":
+          from = new Date();
+          from.setMonth(from.getMonth() - 1);
+          break;
+
+        default:
+          from = null; // all
+      }
+
+      if (from) {
+        where.date = {
+          [Op.gte]: from,
+        };
+      }
+    }
+
+    /* ------------------------
+       CATEGORY IDS FILTER
+       ?categoryIds=1,3,5
+    ------------------------ */
+    if (categoryIds) {
+      const ids = categoryIds
+        .split(",")
+        .map((id) => Number(id))
+        .filter(Boolean);
+
+      if (ids.length === 0) {
+        return res.status(400).json({ error: "Invalid categoryIds" });
+      }
+
+      // ownership check
+      const validCategories = await Category.findAll({
         where: {
-          id: categoryId,
+          id: { [Op.in]: ids },
           userId: req.user.id,
         },
         attributes: ["id"],
       });
 
-      if (!category) {
-        return res.status(400).json({ error: "Invalid category" });
+      if (validCategories.length !== ids.length) {
+        return res
+          .status(403)
+          .json({ error: "Invalid or unauthorized category" });
       }
 
-      where.categoryId = Number(categoryId);
-    }
-
-    //Date range filter
-    if (from && to) {
-      where.date = {
-        [Op.between]: [new Date(from), new Date(to)],
+      where.categoryId = {
+        [Op.in]: ids,
       };
     }
 
-    //Sorting (default: newest first)
-    let order = [["date", "DESC"]];
+    /* ------------------------
+       SORTING
+    ------------------------ */
+    let order = [["date", "DESC"]]; // default
 
-    if (sort === "oldest") {
-      order = [["date", "ASC"]];
+    if (sortOrder === "newestfirst") {
+      order = [["date", "DESC"]];
     }
 
-    if (sort === "amount_desc") {
+    if (sortOrder === "highestamount") {
       order = [["amount", "DESC"]];
     }
 
-    if (sort === "amount_asc") {
-      order = [["amount", "ASC"]];
-    }
-
+    /* ------------------------
+       QUERY
+    ------------------------ */
     const expenses = await Expense.findAll({
       where,
       attributes: ["id", "amount", "description", "date"],
@@ -99,90 +146,90 @@ const getExpenses = async (req, res) => {
     res.status(200).json(expenses);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Expenses cant fetch" });
+    res.status(500).json({ error: "Expenses can't fetch" });
   }
 };
-const getExpenseById = async (req, res) => {
-    const { id } = req.params;
-    try {
-        const expense = await Expense.findOne({
-            where: {
-                id,
-                userId: req.user.id,
-            },
-            attributes: ["id", "amount", "description", "date"],
-            include: [
-                {
-                    model: Category,
-                    as: "category",
-                    attributes: ["id", "name", "icon"],
-                }
-            ]
-        });
-        if (!expense) {
-            return res.status(404).json({ error: "Expense not found" });
-        }
 
-        res.status(200).json(expense);
-    } catch (err) {
-        console.error(err)
-        res.status(500).json({ error: "Server error" });
+const getExpenseById = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const expense = await Expense.findOne({
+      where: {
+        id,
+        userId: req.user.id,
+      },
+      attributes: ["id", "amount", "description", "date"],
+      include: [
+        {
+          model: Category,
+          as: "category",
+          attributes: ["id", "name", "icon"],
+        },
+      ],
+    });
+    if (!expense) {
+      return res.status(404).json({ error: "Expense not found" });
     }
-}
+
+    res.status(200).json(expense);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+};
 
 const updateExpense = async (req, res) => {
-    const { id } = req.params;
-    const { amount, categoryId, description, date } = req.body;
+  const { id } = req.params;
+  const { amount, categoryId, description, date } = req.body;
 
-    try {
-        const expense = await Expense.findOne({
-            where: {
-                id,
-                userId: req.user.id,
-            },
-        });
+  try {
+    const expense = await Expense.findOne({
+      where: {
+        id,
+        userId: req.user.id,
+      },
+    });
 
-        if (!expense) {
-            return res.status(404).json({ error: "Expense not found" });
-        }
-        if (categoryId) {
-            const category = await Category.findOne({
-                where: {
-                    id: categoryId,
-                    userId: req.user.id,
-                },
-            });
-
-            if (!category) {
-                return res.status(400).json({ error: "Invalid category" });
-            }
-        }
-        await expense.update({
-            amount,
-            categoryId,
-            description,
-            date,
-        });
-        const updatedExpense = await Expense.findOne({
-            where: {
-                id,
-                userId: req.user.id,
-            },
-            attributes: ["id", "amount", "description", "date"],
-            include: [
-                {
-                    model: Category,
-                    as: "category",
-                    attributes: ["id", "name", "icon"],
-                },
-            ],
-        });
-        res.status(200).json(updatedExpense);
-
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Expense update failed" });
+    if (!expense) {
+      return res.status(404).json({ error: "Expense not found" });
     }
+    if (categoryId) {
+      const category = await Category.findOne({
+        where: {
+          id: categoryId,
+          userId: req.user.id,
+        },
+      });
+
+      if (!category) {
+        return res.status(400).json({ error: "Invalid category" });
+      }
+    }
+    await expense.update({
+      amount,
+      categoryId,
+      description,
+      date,
+    });
+    const updatedExpense = await Expense.findOne({
+      where: {
+        id,
+        userId: req.user.id,
+      },
+      attributes: ["id", "amount", "description", "date"],
+      include: [
+        {
+          model: Category,
+          as: "category",
+          attributes: ["id", "name", "icon"],
+        },
+      ],
+    });
+    res.status(200).json(updatedExpense);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Expense update failed" });
+  }
 };
 
 const deleteExpense = async (req, res) => {
@@ -249,10 +296,7 @@ const getMonthlySummary = async (req, res) => {
           [Op.between]: [startDate, endDate],
         },
       },
-      attributes: [
-        "categoryId",
-        [fn("SUM", col("amount")), "totalAmount"],
-      ],
+      attributes: ["categoryId", [fn("SUM", col("amount")), "totalAmount"]],
       include: [
         {
           model: Category,
@@ -277,7 +321,6 @@ const getMonthlySummary = async (req, res) => {
 
 const getDashboard = async (req, res) => {
   const userId = req.user.id;
-
   const now = new Date();
 
   const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -287,45 +330,52 @@ const getDashboard = async (req, res) => {
   const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
 
   try {
-    //This month total
-    const thisMonthTotal = await Expense.sum("amount", {
-      where: {
-        userId,
-        date: {
-          [Op.between]: [startOfThisMonth, endOfThisMonth],
+    /* =======================
+       THIS MONTH TOTAL
+    ======================= */
+    const thisMonthTotal =
+      (await Expense.sum("amount", {
+        where: {
+          userId,
+          date: { [Op.between]: [startOfThisMonth, endOfThisMonth] },
         },
-      },
-    });
+      })) || 0;
 
-    //Last month total
-    const lastMonthTotal = await Expense.sum("amount", {
-      where: {
-        userId,
-        date: {
-          [Op.between]: [startOfLastMonth, endOfLastMonth],
+    /* =======================
+       LAST MONTH TOTAL
+    ======================= */
+    const lastMonthTotal =
+      (await Expense.sum("amount", {
+        where: {
+          userId,
+          date: { [Op.between]: [startOfLastMonth, endOfLastMonth] },
         },
-      },
-    });
+      })) || 0;
 
-    //Percentage change
+    /* =======================
+       PERCENTAGE CHANGE
+    ======================= */
     let percentageChange = null;
     if (lastMonthTotal > 0) {
       percentageChange =
         ((thisMonthTotal - lastMonthTotal) / lastMonthTotal) * 100;
     }
 
-    //Category breakdown (this month)
+    /* =======================
+       DAILY AVERAGE (NEW)
+    ======================= */
+    const daysInMonth = endOfThisMonth.getDate();
+    const dailyAverage = Number((thisMonthTotal / daysInMonth).toFixed(2));
+
+    /* =======================
+       CATEGORY BREAKDOWN
+    ======================= */
     const categoryBreakdown = await Expense.findAll({
       where: {
         userId,
-        date: {
-          [Op.between]: [startOfThisMonth, endOfThisMonth],
-        },
+        date: { [Op.between]: [startOfThisMonth, endOfThisMonth] },
       },
-      attributes: [
-        "categoryId",
-        [fn("SUM", col("amount")), "totalAmount"],
-      ],
+      attributes: ["categoryId", [fn("SUM", col("amount")), "totalAmount"]],
       include: [
         {
           model: Category,
@@ -337,10 +387,47 @@ const getDashboard = async (req, res) => {
       order: [[fn("SUM", col("amount")), "DESC"]],
     });
 
-    //Top category
     const topCategory = categoryBreakdown[0] || null;
 
-    //Last 5 expenses
+    /* =======================
+       WEEKLY SPENDING BREAKDOWN (NEW)
+    ======================= */
+    const weekStart = new Date();
+    weekStart.setDate(now.getDate() - 6);
+    weekStart.setHours(0, 0, 0, 0);
+
+    const weeklyExpenses = await Expense.findAll({
+      where: {
+        userId,
+        date: { [Op.between]: [weekStart, now] },
+      },
+      attributes: ["amount", "date"],
+    });
+
+    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const weeklyMap = {
+      Mon: 0,
+      Tue: 0,
+      Wed: 0,
+      Thu: 0,
+      Fri: 0,
+      Sat: 0,
+      Sun: 0,
+    };
+
+    weeklyExpenses.forEach((expense) => {
+      const day = days[new Date(expense.date).getDay()];
+      weeklyMap[day] += Number(expense.amount);
+    });
+
+    const weeklySpendingBreakdown = Object.keys(weeklyMap).map((day) => ({
+      day,
+      amount: Number(weeklyMap[day].toFixed(2)),
+    }));
+
+    /* =======================
+       RECENT EXPENSES
+    ======================= */
     const recentExpenses = await Expense.findAll({
       where: { userId },
       attributes: ["id", "amount", "description", "date"],
@@ -355,14 +442,19 @@ const getDashboard = async (req, res) => {
       limit: 5,
     });
 
+    /* =======================
+       RESPONSE
+    ======================= */
     res.status(200).json({
       thisMonth: {
-        total: thisMonthTotal || 0,
+        total: thisMonthTotal,
         comparedToLastMonth: percentageChange,
       },
+      dailyAverage,
       topCategory,
       categoryBreakdown,
       recentExpenses,
+      weeklySpendingBreakdown,
     });
   } catch (err) {
     console.error(err);
@@ -370,4 +462,12 @@ const getDashboard = async (req, res) => {
   }
 };
 
-module.exports = { createExpense, getExpenses, getExpenseById, updateExpense, deleteExpense, getMonthlySummary, getDashboard };
+module.exports = {
+  createExpense,
+  getExpenses,
+  getExpenseById,
+  updateExpense,
+  deleteExpense,
+  getMonthlySummary,
+  getDashboard,
+};
