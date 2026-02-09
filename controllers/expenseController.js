@@ -367,8 +367,9 @@ const getDashboard = async (req, res) => {
     /* =======================
        DAILY AVERAGE (FIXED)
     ======================= */
-    const daysPassed = now.getDate(); // ayın kaçıncı günü
-    const dailyAverage = Number((thisMonthTotal / daysPassed).toFixed(2));
+    const daysPassed = now.getDate();
+    const dailyAverage =
+      daysPassed > 0 ? Number((thisMonthTotal / daysPassed).toFixed(2)) : null;
 
     /* =======================
        CATEGORY BREAKDOWN
@@ -393,7 +394,7 @@ const getDashboard = async (req, res) => {
     const topCategory = categoryBreakdown[0] || null;
 
     /* =======================
-       WEEKLY SPENDING BREAKDOWN (FIXED – MONDAY BASED)
+       WEEKLY SPENDING BREAKDOWN (FINAL FIX)
     ======================= */
     const weekStart = new Date(now);
     const dayOfWeek = weekStart.getDay(); // 0=Sun, 1=Mon
@@ -402,10 +403,13 @@ const getDashboard = async (req, res) => {
     weekStart.setDate(weekStart.getDate() + diffToMonday);
     weekStart.setHours(0, 0, 0, 0);
 
+    const endOfToday = new Date(now);
+    endOfToday.setHours(23, 59, 59, 999);
+
     const weeklyExpenses = await Expense.findAll({
       where: {
         userId,
-        date: { [Op.between]: [weekStart, now] },
+        date: { [Op.between]: [weekStart, endOfToday] },
       },
       attributes: ["amount", "date"],
     });
