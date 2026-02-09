@@ -442,13 +442,25 @@ const getDashboard = async (req, res) => {
     const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
     weeklyExpenses.forEach((expense) => {
-      // DATEONLY "2026-02-10" string'ini yerel saatte işle:
-      const [y, m, d] = expense.date.split("-").map(Number);
-      const localDate = new Date(y, m - 1, d);
-      const dayName = days[localDate.getDay()];
+      let expenseDate;
 
-      if (weeklyMap.hasOwnProperty(dayName)) {
-        weeklyMap[dayName] += Number(expense.amount);
+      // Eğer Sequelize direkt Date objesi döndürdüyse
+      if (expense.date instanceof Date) {
+        expenseDate = expense.date;
+      } else {
+        // String döndürdüyse (DATEONLY genellikle string döner ama garantiye alalım)
+        const [y, m, d] = String(expense.date).split("-").map(Number);
+        expenseDate = new Date(y, m - 1, d);
+      }
+
+      // getDay() sonucunu kontrol etmeden önce geçerli bir tarih mi bakalım
+      if (!isNaN(expenseDate.getTime())) {
+        const dayIndex = expenseDate.getDay();
+        const dayName = days[dayIndex];
+
+        if (weeklyMap.hasOwnProperty(dayName)) {
+          weeklyMap[dayName] += Number(expense.amount);
+        }
       }
     });
 
