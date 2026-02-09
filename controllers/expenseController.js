@@ -323,14 +323,25 @@ const getDashboard = async (req, res) => {
   const userId = req.user.id;
   const now = new Date();
 
-  /* =======================
-     MONTH RANGES
-  ======================= */
-  const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const endOfThisMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  // YYYY-MM-DD helper
+  const toDateString = (date) => date.toISOString().slice(0, 10);
 
-  const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+  /* =======================
+     MONTH RANGES (DATE)
+  ======================= */
+  const startOfThisMonth = toDateString(
+    new Date(now.getFullYear(), now.getMonth(), 1),
+  );
+  const endOfThisMonth = toDateString(
+    new Date(now.getFullYear(), now.getMonth() + 1, 0),
+  );
+
+  const startOfLastMonth = toDateString(
+    new Date(now.getFullYear(), now.getMonth() - 1, 1),
+  );
+  const endOfLastMonth = toDateString(
+    new Date(now.getFullYear(), now.getMonth(), 0),
+  );
 
   try {
     /* =======================
@@ -340,7 +351,10 @@ const getDashboard = async (req, res) => {
       (await Expense.sum("amount", {
         where: {
           userId,
-          date: { [Op.between]: [startOfThisMonth, endOfThisMonth] },
+          date: {
+            [Op.gte]: startOfThisMonth,
+            [Op.lte]: endOfThisMonth,
+          },
         },
       })) || 0;
 
@@ -351,7 +365,10 @@ const getDashboard = async (req, res) => {
       (await Expense.sum("amount", {
         where: {
           userId,
-          date: { [Op.between]: [startOfLastMonth, endOfLastMonth] },
+          date: {
+            [Op.gte]: startOfLastMonth,
+            [Op.lte]: endOfLastMonth,
+          },
         },
       })) || 0;
 
@@ -365,7 +382,7 @@ const getDashboard = async (req, res) => {
     }
 
     /* =======================
-       DAILY AVERAGE (FIXED)
+       DAILY AVERAGE
     ======================= */
     const daysPassed = now.getDate();
     const dailyAverage =
@@ -377,7 +394,10 @@ const getDashboard = async (req, res) => {
     const categoryBreakdown = await Expense.findAll({
       where: {
         userId,
-        date: { [Op.between]: [startOfThisMonth, endOfThisMonth] },
+        date: {
+          [Op.gte]: startOfThisMonth,
+          [Op.lte]: endOfThisMonth,
+        },
       },
       attributes: ["categoryId", [fn("SUM", col("amount")), "totalAmount"]],
       include: [
@@ -394,22 +414,24 @@ const getDashboard = async (req, res) => {
     const topCategory = categoryBreakdown[0] || null;
 
     /* =======================
-       WEEKLY SPENDING BREAKDOWN (FINAL FIX)
+       WEEKLY SPENDING (DATE SAFE)
     ======================= */
     const weekStart = new Date(now);
-    const dayOfWeek = weekStart.getDay(); // 0=Sun, 1=Mon
+    const dayOfWeek = weekStart.getDay(); // 0=Sun
     const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
 
     weekStart.setDate(weekStart.getDate() + diffToMonday);
-    weekStart.setHours(0, 0, 0, 0);
 
-    const endOfToday = new Date(now);
-    endOfToday.setHours(23, 59, 59, 999);
+    const weekStartDate = toDateString(weekStart);
+    const todayDate = toDateString(now);
 
     const weeklyExpenses = await Expense.findAll({
       where: {
         userId,
-        date: { [Op.between]: [weekStart, endOfToday] },
+        date: {
+          [Op.gte]: weekStartDate,
+          [Op.lte]: todayDate,
+        },
       },
       attributes: ["amount", "date"],
     });
