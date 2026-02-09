@@ -415,17 +415,21 @@ const getDashboard = async (req, res) => {
     ======================= */
     const weekStart = new Date(now);
     weekStart.setHours(0, 0, 0, 0);
+
     const dayOfWeek = weekStart.getDay();
     const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
     weekStart.setDate(weekStart.getDate() + diffToMonday);
 
-    const weekStartDate = toDateString(weekStart);
-    const todayDate = toDateString(now);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    weekEnd.setHours(23, 59, 59, 999);
 
     const weeklyExpenses = await Expense.findAll({
       where: {
         userId,
-        date: { [Op.gte]: weekStartDate, [Op.lte]: todayDate },
+        date: {
+          [Op.between]: [weekStart, weekEnd],
+        },
       },
       attributes: ["amount", "date"],
     });
@@ -442,25 +446,14 @@ const getDashboard = async (req, res) => {
     const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
     weeklyExpenses.forEach((expense) => {
-      let expenseDate;
+      const expenseDate = new Date(expense.date);
+      if (isNaN(expenseDate.getTime())) return;
 
-      // Eğer Sequelize direkt Date objesi döndürdüyse
-      if (expense.date instanceof Date) {
-        expenseDate = expense.date;
-      } else {
-        // String döndürdüyse (DATEONLY genellikle string döner ama garantiye alalım)
-        const [y, m, d] = String(expense.date).split("-").map(Number);
-        expenseDate = new Date(y, m - 1, d);
-      }
+      const dayIndex = expenseDate.getDay();
+      const dayName = days[dayIndex];
 
-      // getDay() sonucunu kontrol etmeden önce geçerli bir tarih mi bakalım
-      if (!isNaN(expenseDate.getTime())) {
-        const dayIndex = expenseDate.getDay();
-        const dayName = days[dayIndex];
-
-        if (weeklyMap.hasOwnProperty(dayName)) {
-          weeklyMap[dayName] += Number(expense.amount);
-        }
+      if (weeklyMap[dayName] !== undefined) {
+        weeklyMap[dayName] += Number(expense.amount);
       }
     });
 
