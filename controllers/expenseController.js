@@ -323,6 +323,9 @@ const getDashboard = async (req, res) => {
   const userId = req.user.id;
   const now = new Date();
 
+  /* =======================
+     MONTH RANGES
+  ======================= */
   const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const endOfThisMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
@@ -362,10 +365,10 @@ const getDashboard = async (req, res) => {
     }
 
     /* =======================
-       DAILY AVERAGE (NEW)
+       DAILY AVERAGE (FIXED)
     ======================= */
-    const daysInMonth = endOfThisMonth.getDate();
-    const dailyAverage = Number((thisMonthTotal / daysInMonth).toFixed(2));
+    const daysPassed = now.getDate(); // ayın kaçıncı günü
+    const dailyAverage = Number((thisMonthTotal / daysPassed).toFixed(2));
 
     /* =======================
        CATEGORY BREAKDOWN
@@ -390,10 +393,13 @@ const getDashboard = async (req, res) => {
     const topCategory = categoryBreakdown[0] || null;
 
     /* =======================
-       WEEKLY SPENDING BREAKDOWN (NEW)
+       WEEKLY SPENDING BREAKDOWN (FIXED – MONDAY BASED)
     ======================= */
-    const weekStart = new Date();
-    weekStart.setDate(now.getDate() - 6);
+    const weekStart = new Date(now);
+    const dayOfWeek = weekStart.getDay(); // 0=Sun, 1=Mon
+    const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+
+    weekStart.setDate(weekStart.getDate() + diffToMonday);
     weekStart.setHours(0, 0, 0, 0);
 
     const weeklyExpenses = await Expense.findAll({
@@ -404,7 +410,6 @@ const getDashboard = async (req, res) => {
       attributes: ["amount", "date"],
     });
 
-    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const weeklyMap = {
       Mon: 0,
       Tue: 0,
@@ -415,12 +420,16 @@ const getDashboard = async (req, res) => {
       Sun: 0,
     };
 
+    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
     weeklyExpenses.forEach((expense) => {
       const day = days[new Date(expense.date).getDay()];
       weeklyMap[day] += Number(expense.amount);
     });
 
-    const weeklySpendingBreakdown = Object.keys(weeklyMap).map((day) => ({
+    const orderedDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+    const weeklySpendingBreakdown = orderedDays.map((day) => ({
       day,
       amount: Number(weeklyMap[day].toFixed(2)),
     }));
