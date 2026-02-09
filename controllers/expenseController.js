@@ -323,11 +323,16 @@ const getDashboard = async (req, res) => {
   const userId = req.user.id;
   const now = new Date();
 
-  // YYYY-MM-DD helper
-  const toDateString = (date) => date.toISOString().slice(0, 10);
+  // YYYY-MM-DD helper (Zaman dilimi kaymasını önlemek için yerel saati kullanır)
+  const toDateString = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
 
   /* =======================
-     MONTH RANGES (DATE)
+     TARİH ARALIKLARI
   ======================= */
   const startOfThisMonth = toDateString(
     new Date(now.getFullYear(), now.getMonth(), 1),
@@ -345,59 +350,51 @@ const getDashboard = async (req, res) => {
 
   try {
     /* =======================
-       THIS MONTH TOTAL
+       BU AYIN TOPLAMI
     ======================= */
-    const thisMonthTotal =
-      (await Expense.sum("amount", {
-        where: {
-          userId,
-          date: {
-            [Op.gte]: startOfThisMonth,
-            [Op.lte]: endOfThisMonth,
-          },
-        },
-      })) || 0;
+    const thisMonthTotalResult = await Expense.sum("amount", {
+      where: {
+        userId,
+        date: { [Op.gte]: startOfThisMonth, [Op.lte]: endOfThisMonth },
+      },
+    });
+    const thisMonthTotal = Number(thisMonthTotalResult) || 0;
 
     /* =======================
-       LAST MONTH TOTAL
+       GEÇEN AYIN TOPLAMI
     ======================= */
-    const lastMonthTotal =
-      (await Expense.sum("amount", {
-        where: {
-          userId,
-          date: {
-            [Op.gte]: startOfLastMonth,
-            [Op.lte]: endOfLastMonth,
-          },
-        },
-      })) || 0;
+    const lastMonthTotalResult = await Expense.sum("amount", {
+      where: {
+        userId,
+        date: { [Op.gte]: startOfLastMonth, [Op.lte]: endOfLastMonth },
+      },
+    });
+    const lastMonthTotal = Number(lastMonthTotalResult) || 0;
 
     /* =======================
-       PERCENTAGE CHANGE
+       YÜZDELİK DEĞİŞİM
     ======================= */
     let percentageChange = null;
     if (lastMonthTotal > 0) {
-      percentageChange =
-        ((thisMonthTotal - lastMonthTotal) / lastMonthTotal) * 100;
+      percentageChange = Number(
+        ((thisMonthTotal - lastMonthTotal) / lastMonthTotal) * 100,
+      ).toFixed(2);
     }
 
     /* =======================
-       DAILY AVERAGE
+       GÜNLÜK ORTALAMA
     ======================= */
     const daysPassed = now.getDate();
     const dailyAverage =
-      daysPassed > 0 ? Number((thisMonthTotal / daysPassed).toFixed(2)) : null;
+      daysPassed > 0 ? Number((thisMonthTotal / daysPassed).toFixed(2)) : 0;
 
     /* =======================
-       CATEGORY BREAKDOWN
+       KATEGORİ DAĞILIMI
     ======================= */
     const categoryBreakdown = await Expense.findAll({
       where: {
         userId,
-        date: {
-          [Op.gte]: startOfThisMonth,
-          [Op.lte]: endOfThisMonth,
-        },
+        date: { [Op.gte]: startOfThisMonth, [Op.lte]: endOfThisMonth },
       },
       attributes: ["categoryId", [fn("SUM", col("amount")), "totalAmount"]],
       include: [
@@ -414,12 +411,12 @@ const getDashboard = async (req, res) => {
     const topCategory = categoryBreakdown[0] || null;
 
     /* =======================
-       WEEKLY SPENDING (DATE SAFE)
+       HAFTALIK HARCAMA (DÜZELTİLMİŞ)
     ======================= */
     const weekStart = new Date(now);
-    const dayOfWeek = weekStart.getDay(); // 0=Sun
+    weekStart.setHours(0, 0, 0, 0);
+    const dayOfWeek = weekStart.getDay();
     const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-
     weekStart.setDate(weekStart.getDate() + diffToMonday);
 
     const weekStartDate = toDateString(weekStart);
@@ -428,10 +425,7 @@ const getDashboard = async (req, res) => {
     const weeklyExpenses = await Expense.findAll({
       where: {
         userId,
-        date: {
-          [Op.gte]: weekStartDate,
-          [Op.lte]: todayDate,
-        },
+        date: { [Op.gte]: weekStartDate, [Op.lte]: todayDate },
       },
       attributes: ["amount", "date"],
     });
@@ -445,23 +439,27 @@ const getDashboard = async (req, res) => {
       Sat: 0,
       Sun: 0,
     };
-
     const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
     weeklyExpenses.forEach((expense) => {
-      const day = days[new Date(expense.date).getDay()];
-      weeklyMap[day] += Number(expense.amount);
+      // DATEONLY "2026-02-10" string'ini yerel saatte işle:
+      const [y, m, d] = expense.date.split("-").map(Number);
+      const localDate = new Date(y, m - 1, d);
+      const dayName = days[localDate.getDay()];
+
+      if (weeklyMap.hasOwnProperty(dayName)) {
+        weeklyMap[dayName] += Number(expense.amount);
+      }
     });
 
     const orderedDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
     const weeklySpendingBreakdown = orderedDays.map((day) => ({
       day,
       amount: Number(weeklyMap[day].toFixed(2)),
     }));
 
     /* =======================
-       RECENT EXPENSES
+       SON HARCAMALAR
     ======================= */
     const recentExpenses = await Expense.findAll({
       where: { userId },
@@ -473,17 +471,20 @@ const getDashboard = async (req, res) => {
           attributes: ["id", "name", "icon"],
         },
       ],
-      order: [["date", "DESC"]],
+      order: [
+        ["date", "DESC"],
+        ["createdAt", "DESC"],
+      ], // Aynı gün içindeki sırayı korumak için
       limit: 5,
     });
 
     /* =======================
-       RESPONSE
+       YANIT
     ======================= */
     res.status(200).json({
       thisMonth: {
         total: thisMonthTotal,
-        comparedToLastMonth: percentageChange,
+        comparedToLastMonth: percentageChange ? Number(percentageChange) : null,
       },
       dailyAverage,
       topCategory,
@@ -492,7 +493,7 @@ const getDashboard = async (req, res) => {
       weeklySpendingBreakdown,
     });
   } catch (err) {
-    console.error(err);
+    console.error("Dashboard Error:", err);
     res.status(500).json({ error: "Dashboard fetch failed" });
   }
 };
