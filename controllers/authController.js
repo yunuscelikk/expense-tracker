@@ -67,19 +67,21 @@ const loginUser = async (req, res) => {
 
 const guestLogin = async (req, res) => {
   try {
-    // Hiçbir bilgi istemeden rastgele bir kullanıcı oluşturuyoruz
-    // Not: Modelinde email alanı "unique" ise buraya rastgele bir değer
-    // veya geçici bir email formatı ataman gerekebilir.
+    // 1. Benzersiz bir geçici email üret (Unique kısıtlamasına takılmamak için)
+    const uniqueId = Date.now() + "_" + Math.floor(Math.random() * 1000);
+    const guestEmail = `guest_${uniqueId}@expenz.internal`;
+
+    // 2. Kullanıcıyı oluştur (Şifre göndermiyoruz, model artık izin veriyor)
     const guestUser = await User.create({
-      // Eğer modelinde email zorunluysa:
-      // email: `guest_${Date.now()}@expenz.internal`,
-      isGuest: true, // (Opsiyonel) Veritabanında takip etmek istersen
+      email: guestEmail,
+      password: null, // Şifresiz giriş
     });
 
+    // 3. Mevcut token yapını kullan
     const accessToken = signAccessToken(guestUser.id);
     const refreshToken = signRefreshToken(guestUser.id);
 
-    // Refresh token'ı hashleyerek kaydet (mevcut login mantığınla aynı)
+    // 4. Refresh token'ı hashleyerek kaydet
     await guestUser.update({
       refreshToken: await bcrypt.hash(refreshToken, 10),
     });
@@ -89,11 +91,12 @@ const guestLogin = async (req, res) => {
       refreshToken,
       user: {
         id: guestUser.id,
-        isGuest: true,
+        email: guestUser.email,
+        isGuest: true, // Frontend'de misafir olduğunu anlamak için yararlı
       },
     });
   } catch (err) {
-    console.error("Guest login error:", err);
+    console.error("Guest Login Hatası:", err);
     res.status(500).json({ error: "Failed to create guest session" });
   }
 };
