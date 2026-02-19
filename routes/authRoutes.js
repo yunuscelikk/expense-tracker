@@ -30,6 +30,9 @@ router.post(
   validate(refreshSchema),
   authController.refreshTokenHandler,
 );
+
+router.post("/guest-login", authController.guestLogin);
+
 router.post("/logout", authMiddleware, authController.logout);
 
 router.delete("/delete-account", authMiddleware, authController.deleteAccount);

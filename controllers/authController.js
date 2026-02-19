@@ -65,6 +65,39 @@ const loginUser = async (req, res) => {
   }
 };
 
+const guestLogin = async (req, res) => {
+  try {
+    // Hiçbir bilgi istemeden rastgele bir kullanıcı oluşturuyoruz
+    // Not: Modelinde email alanı "unique" ise buraya rastgele bir değer
+    // veya geçici bir email formatı ataman gerekebilir.
+    const guestUser = await User.create({
+      // Eğer modelinde email zorunluysa:
+      // email: `guest_${Date.now()}@expenz.internal`,
+      isGuest: true, // (Opsiyonel) Veritabanında takip etmek istersen
+    });
+
+    const accessToken = signAccessToken(guestUser.id);
+    const refreshToken = signRefreshToken(guestUser.id);
+
+    // Refresh token'ı hashleyerek kaydet (mevcut login mantığınla aynı)
+    await guestUser.update({
+      refreshToken: await bcrypt.hash(refreshToken, 10),
+    });
+
+    res.status(201).json({
+      accessToken,
+      refreshToken,
+      user: {
+        id: guestUser.id,
+        isGuest: true,
+      },
+    });
+  } catch (err) {
+    console.error("Guest login error:", err);
+    res.status(500).json({ error: "Failed to create guest session" });
+  }
+};
+
 const getMe = async (req, res) => {
   try {
     const user = await User.findByPk(req.user.id, {
@@ -152,4 +185,5 @@ module.exports = {
   refreshTokenHandler,
   logout,
   deleteAccount,
+  guestLogin,
 };
