@@ -67,37 +67,31 @@ const loginUser = async (req, res) => {
 
 const guestLogin = async (req, res) => {
   try {
-    // 1. Benzersiz bir geçici email üret (Unique kısıtlamasına takılmamak için)
     const uniqueId = Date.now() + "_" + Math.floor(Math.random() * 1000);
     const guestEmail = `guest_${uniqueId}@expenz.internal`;
 
-    // 2. Kullanıcıyı oluştur (Şifre göndermiyoruz, model artık izin veriyor)
     const guestUser = await User.create({
       email: guestEmail,
-      password: null, // Şifresiz giriş
+      password: null,
     });
 
-    // 3. Mevcut token yapını kullan
     const accessToken = signAccessToken(guestUser.id);
     const refreshToken = signRefreshToken(guestUser.id);
 
-    // 4. Refresh token'ı hashleyerek kaydet
     await guestUser.update({
       refreshToken: await bcrypt.hash(refreshToken, 10),
     });
 
-    res.status(201).json({
-      accessToken,
-      refreshToken,
-      user: {
-        id: guestUser.id,
-        email: guestUser.email,
-        isGuest: true, // Frontend'de misafir olduğunu anlamak için yararlı
-      },
-    });
+    res
+      .status(201)
+      .json({ accessToken, refreshToken, user: { id: guestUser.id } });
   } catch (err) {
-    console.error("Guest Login Hatası:", err);
-    res.status(500).json({ error: "Failed to create guest session" });
+    // BURASI ÇOK ÖNEMLİ: Hatayı direkt kullanıcıya dönüyoruz
+    res.status(500).json({
+      error: "Failed to create guest session",
+      message: err.message, // Hatanın açıklaması (Örn: "password cannot be null")
+      sequelizeError: err.name, // Sequelize hatasının adı (Örn: "SequelizeDatabaseError")
+    });
   }
 };
 
