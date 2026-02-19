@@ -70,27 +70,36 @@ const guestLogin = async (req, res) => {
     const uniqueId = Date.now() + "_" + Math.floor(Math.random() * 1000);
     const guestEmail = `guest_${uniqueId}@expenz.internal`;
 
+    // Modelin zorunlu tuttuğu şifre alanına rastgele bir değer atıyoruz
+    // Bu sayede "notNull Violation" hatasından tamamen kurtuluruz.
+    const randomPassword = Math.random().toString(36).slice(-10);
+
     const guestUser = await User.create({
       email: guestEmail,
-      password: null,
+      password: randomPassword, // Artık burası null değil, hata vermeyecek
     });
 
     const accessToken = signAccessToken(guestUser.id);
     const refreshToken = signRefreshToken(guestUser.id);
 
+    // Refresh token'ı hashleyerek kaydet
     await guestUser.update({
       refreshToken: await bcrypt.hash(refreshToken, 10),
     });
 
-    res
-      .status(201)
-      .json({ accessToken, refreshToken, user: { id: guestUser.id } });
+    res.status(201).json({
+      accessToken,
+      refreshToken,
+      user: {
+        id: guestUser.id,
+        email: guestUser.email,
+        isGuest: true,
+      },
+    });
   } catch (err) {
-    // BURASI ÇOK ÖNEMLİ: Hatayı direkt kullanıcıya dönüyoruz
     res.status(500).json({
       error: "Failed to create guest session",
-      message: err.message, // Hatanın açıklaması (Örn: "password cannot be null")
-      sequelizeError: err.name, // Sequelize hatasının adı (Örn: "SequelizeDatabaseError")
+      message: err.message,
     });
   }
 };
